@@ -7,7 +7,7 @@ import { ShutdownService } from './common/services/shutdown.service';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
-
+import { json, urlencoded } from 'express';
 // Configuration loading order (later sources do NOT override earlier ones):
 //   1. Process env (Docker, shell, systemd) — highest priority
 //   2. .env (project-level overrides committed/managed by the user)
@@ -126,6 +126,10 @@ async function bootstrap() {
 
   // Global prefix
   app.setGlobalPrefix('api');
+
+  // Increase payload size limits
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   // Enhanced Validation pipe with security options
   app.useGlobalPipes(

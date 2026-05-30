@@ -271,7 +271,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   async sendTextMessage(chatId: string, text: string): Promise<MessageResult> {
     this.ensureReady();
-    const msg = await this.client!.sendMessage(chatId, text);
+    const formattedChatId = chatId.includes('@') ? chatId : `${chatId}@c.us`;
+    const msg = await this.client!.sendMessage(formattedChatId, text);
     return {
       id: msg.id._serialized,
       timestamp: msg.timestamp,
@@ -296,6 +297,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   private async sendMediaMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     this.ensureReady();
+    const formattedChatId = chatId.includes('@') ? chatId : `${chatId}@c.us`;
 
     let messageMedia: MessageMedia;
 
@@ -312,7 +314,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       messageMedia = new MessageMedia(media.mimetype, media.data.toString('base64'), media.filename);
     }
 
-    const msg = await this.client!.sendMessage(chatId, messageMedia, {
+    const msg = await this.client!.sendMessage(formattedChatId, messageMedia, {
       caption: media.caption,
     });
 
