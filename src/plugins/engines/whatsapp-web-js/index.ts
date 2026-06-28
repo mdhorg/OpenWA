@@ -37,6 +37,8 @@ export class WhatsAppWebJsPlugin implements IEnginePlugin {
     const sessionId = config.sessionId as string;
     const sessionDataPath = (this.context?.config.sessionDataPath as string) ?? './data/sessions';
     const headless = (this.context?.config.headless as boolean) ?? true;
+    const memoryLimit = (this.context?.config.puppeteerMemoryLimit as number) ?? 128;
+    const incomingMessages = (this.context?.config.incomingMessages as boolean) ?? true;
     const puppeteerArgs = (this.context?.config.puppeteerArgs as string[]) ?? [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -51,6 +53,7 @@ export class WhatsAppWebJsPlugin implements IEnginePlugin {
       puppeteer: {
         headless,
         args: puppeteerArgs,
+        memoryLimit,
       },
       proxy: proxyUrl
         ? {
@@ -58,6 +61,7 @@ export class WhatsAppWebJsPlugin implements IEnginePlugin {
             type: proxyType ?? 'http',
           }
         : undefined,
+      incomingMessages,
     });
   }
 

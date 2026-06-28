@@ -48,9 +48,11 @@ export default () => ({
   // WhatsApp engine configuration
   engine: {
     type: process.env.ENGINE_TYPE || 'whatsapp-web.js',
+    incomingMessages: process.env.INCOMING_MESSAGES_ENABLED !== 'false',
     puppeteer: {
       headless: process.env.PUPPETEER_HEADLESS !== 'false',
       args: (process.env.PUPPETEER_ARGS || '--no-sandbox,--disable-setuid-sandbox').split(','),
+      memoryLimit: parseInt(process.env.PUPPETEER_MEMORY_LIMIT || '128', 10),
     },
     sessionDataPath: process.env.SESSION_DATA_PATH || './data/sessions',
   },

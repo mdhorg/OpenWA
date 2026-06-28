@@ -128,8 +128,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Increase payload size limits
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   // Enhanced Validation pipe with security options
   app.useGlobalPipes(

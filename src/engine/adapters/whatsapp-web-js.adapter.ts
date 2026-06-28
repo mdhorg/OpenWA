@@ -42,12 +42,15 @@ export interface WhatsAppWebJsConfig {
   puppeteer?: {
     headless?: boolean;
     args?: string[];
+    memoryLimit?: number;
   };
   // Phase 3: Proxy per session
   proxy?: {
     url: string;
     type: 'http' | 'https' | 'socks4' | 'socks5';
   };
+  // Incoming messages toggle — false for outbound-only mode
+  incomingMessages?: boolean;
 }
 
 export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngine {
@@ -64,13 +67,27 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   private readonly logger = createLogger('WhatsAppWebJsAdapter');
 
+  /** Memory-optimized Chromium flags — reduces ~40-60MB per session */
+  private readonly slimArgs = [
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-default-apps',
+    '--disable-sync',
+    '--disable-translate',
+    '--metrics-recording-only',
+    '--no-pings',
+    '--disable-software-rasterizer',
+    '--disable-dev-tools',
+    '--window-size=800,600',
+  ];
+
   async initialize(callbacks: EngineEventCallbacks): Promise<void> {
     this.callbacks = callbacks;
     this.setStatus(EngineStatus.INITIALIZING);
 
     try {
-      // Build puppeteer args, including proxy if configured
-      const puppeteerArgs = this.config.puppeteer?.args || [
+      // Build puppeteer args from config + slim flags + proxy
+      const baseArgs = this.config.puppeteer?.args || [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
@@ -78,6 +95,13 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         '--no-first-run',
         '--no-zygote',
         '--disable-gpu',
+      ];
+
+      const memoryLimit = this.config.puppeteer?.memoryLimit ?? 128;
+      const puppeteerArgs = [
+        ...baseArgs,
+        ...this.slimArgs,
+        `--js-flags=--max-old-space-size=${memoryLimit}`,
       ];
 
       // Add proxy configuration if provided
@@ -140,59 +164,63 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       }
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
-    this.client.on('message', async msg => {
-      try {
-        const incomingMessage: IncomingMessage = {
-          id: msg.id._serialized,
-          from: msg.from,
-          to: msg.to,
-          chatId: msg.from,
-          body: msg.body,
-          type: msg.type,
-          timestamp: msg.timestamp,
-          fromMe: msg.fromMe,
-          isGroup: msg.from.endsWith('@g.us'),
-        };
+    // Incoming message handlers — skip entirely for outbound-only mode
+    const incomingEnabled = this.config.incomingMessages ?? true;
+    if (incomingEnabled) {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      this.client.on('message', async msg => {
+        try {
+          const incomingMessage: IncomingMessage = {
+            id: msg.id._serialized,
+            from: msg.from,
+            to: msg.to,
+            chatId: msg.from,
+            body: msg.body,
+            type: msg.type,
+            timestamp: msg.timestamp,
+            fromMe: msg.fromMe,
+            isGroup: msg.from.endsWith('@g.us'),
+          };
 
-        // Handle media
-        if (msg.hasMedia) {
-          try {
-            const media = await msg.downloadMedia();
-            if (media) {
-              incomingMessage.media = {
-                mimetype: media.mimetype,
-                filename: media.filename || undefined,
-                data: media.data,
-              };
+          // Handle media
+          if (msg.hasMedia) {
+            try {
+              const media = await msg.downloadMedia();
+              if (media) {
+                incomingMessage.media = {
+                  mimetype: media.mimetype,
+                  filename: media.filename || undefined,
+                  data: media.data,
+                };
+              }
+            } catch (error) {
+              this.logger.error('Error downloading media', String(error));
             }
-          } catch (error) {
-            this.logger.error('Error downloading media', String(error));
           }
-        }
 
-        // Handle quoted message
-        if (msg.hasQuotedMsg) {
-          try {
-            const quoted = await msg.getQuotedMessage();
-            incomingMessage.quotedMessage = {
-              id: quoted.id._serialized,
-              body: quoted.body,
-            };
-          } catch (error) {
-            this.logger.error('Error getting quoted message', String(error));
+          // Handle quoted message
+          if (msg.hasQuotedMsg) {
+            try {
+              const quoted = await msg.getQuotedMessage();
+              incomingMessage.quotedMessage = {
+                id: quoted.id._serialized,
+                body: quoted.body,
+              };
+            } catch (error) {
+              this.logger.error('Error getting quoted message', String(error));
+            }
           }
+
+          this.callbacks.onMessage?.(incomingMessage);
+        } catch (error) {
+          this.logger.error('Error processing incoming message', String(error));
         }
+      });
 
-        this.callbacks.onMessage?.(incomingMessage);
-      } catch (error) {
-        this.logger.error('Error processing incoming message', String(error));
-      }
-    });
-
-    this.client.on('message_ack', (msg, ack) => {
-      this.callbacks.onMessageAck?.(msg.id._serialized, ack);
-    });
+      this.client.on('message_ack', (msg, ack) => {
+        this.callbacks.onMessageAck?.(msg.id._serialized, ack);
+      });
+    }
 
     this.client.on('disconnected', reason => {
       this.setStatus(EngineStatus.DISCONNECTED);

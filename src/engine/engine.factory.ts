@@ -30,6 +30,9 @@ export class EngineFactory implements OnModuleInit {
   }
 
   private async registerBuiltInEngines(): Promise<void> {
+    const memoryLimit = this.configService.get<number>('engine.puppeteer.memoryLimit', 128);
+    const incomingMessages = this.configService.get<boolean>('engine.incomingMessages', true);
+
     // Register WhatsApp-web.js as built-in plugin
     const wwjsManifest: PluginManifest = {
       id: 'whatsapp-web.js',
@@ -42,7 +45,19 @@ export class EngineFactory implements OnModuleInit {
     };
 
     const wwjsPlugin = new WhatsAppWebJsPlugin();
+
+    // Pre-populate config so the plugin context has puppeteer + incoming settings
     this.pluginLoader.registerBuiltInPlugin(wwjsManifest, wwjsPlugin);
+    this.pluginLoader.updatePluginConfig(wwjsManifest.id, {
+      headless: this.configService.get<boolean>('engine.puppeteer.headless', true),
+      sessionDataPath: this.configService.get<string>('engine.sessionDataPath', './data/sessions'),
+      puppeteerArgs: this.configService.get<string[]>('engine.puppeteer.args', [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ]),
+      puppeteerMemoryLimit: memoryLimit,
+      incomingMessages,
+    });
 
     // Auto-enable the configured engine
     try {
@@ -99,6 +114,7 @@ export class EngineFactory implements OnModuleInit {
       puppeteer: {
         headless: this.configService.get<boolean>('engine.puppeteer.headless') ?? true,
         args: this.configService.get<string[]>('engine.puppeteer.args') ?? ['--no-sandbox', '--disable-setuid-sandbox'],
+        memoryLimit: this.configService.get<number>('engine.puppeteer.memoryLimit', 128),
       },
       proxy: options.proxyUrl
         ? {
@@ -106,6 +122,7 @@ export class EngineFactory implements OnModuleInit {
             type: options.proxyType ?? 'http',
           }
         : undefined,
+      incomingMessages: this.configService.get<boolean>('engine.incomingMessages', true),
     });
   }
 

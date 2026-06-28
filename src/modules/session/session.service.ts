@@ -310,6 +310,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
             void this.webhookService.dispatch(id, 'message.received', finalMessage as Record<string, unknown>);
             // Emit real-time event to WebSocket clients
             this.eventsGateway.emitMessage(id, finalMessage as Record<string, unknown>);
+
+            // Drop media base64 blob to free memory after dispatch completes
+            // (media.data can be 100KB-50MB; holding it until GC causes memory spikes)
+            delete (finalMessage as Record<string, unknown>).media;
           });
       },
       onDisconnected: (reason: string): void => {
